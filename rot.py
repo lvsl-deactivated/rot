@@ -1,12 +1,21 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-#
-# R.O.T - Rotate Outputs To ...
-#
+'''
+%prog [options] <program> args
 
-# XXX: -u turns off std{out,err,in} buffering
-# and set binary mode (see man page for details)
+======
+R.O.T - Rotate Outputs To ...
+
+Example:
+  %prog --stdout-file ~/out.txt \\
+         --stdout-count 4        \\
+         --stdout-limit 100M     \\
+  spam_program -a -b -c 10
+======
+'''
+
+DEBUG = True
 
 import os
 import sys
@@ -47,12 +56,15 @@ class Validator(object):
         return valid_v
 
     def _validate_count(self, count):
-        if type(count) != int:
-            self.err_msg = 'Wrong type for count: %s' % type(count)
-        elif count <= 0:
+        try:
+            c = int(count)
+        except (ValueError, TypeError):
+            self.err_msg = "Can't convert %s to int" % count
+            return
+        if c <= 0:
             self.err_msg = 'Count must be > 0'
         else:
-            return count
+            return c
 
     def _validate_file(self, path_to_file):
         abs_path_to_file = os.path.abspath(os.path.expanduser(path_to_file))
@@ -67,7 +79,7 @@ class Validator(object):
             return abs_path_to_file
 
     def _validate_limit(self, limit):
-        n = limit[:-1]
+        sn = limit[:-1]
         s = limit[-1]
         n2bytes = {
             'B': 1,
@@ -77,9 +89,15 @@ class Validator(object):
         }
         if s not in n2bytes:
             self.err_msg = 'Incorrent size identificator: %s' % s
-        elif not n.isdigit():
-            self.err_msg = "%s isn't a digit" % n
-        elif n <= 0:
+            return
+
+        try:
+            n = int(sn)
+        except (ValueError, TypeError):
+            self.err_msg = "Can't convert %s to int" % sn
+            return
+
+        if n <= 0:
             self.err_msg = "%s must be > 0" % n
         else:
             limit_in_bytes = int(n) * n2bytes[s]
@@ -137,13 +155,13 @@ def validate_args(a):
 
 
 def read_argv():
-    p = OptionParser(usage="%prog [patams] -- <args>")
+    p = OptionParser(usage=__doc__)
     p.add_option("--stdout-file",  dest="out_file")
-    p.add_option("--stdout-count", dest="out_count", type="int")
+    p.add_option("--stdout-count", dest="out_count")
     p.add_option("--stdout-limit", dest="out_limit")
 
     p.add_option("--stderr-file",  dest="err_file")
-    p.add_option("--stderr-count", dest="err_count", type="int")
+    p.add_option("--stderr-count", dest="err_count")
     p.add_option("--stderr-limit", dest="err_limit")
 
     opts, args = p.parse_args()
@@ -165,7 +183,11 @@ def main():
     try:
         opts = read_argv()
     except Exception as e:
-        sys.stderr.write("%s\n" % e)
+        if DEBUG:
+            msg = e
+        else:
+            msg = e.message
+        sys.stderr.write("%s\n" % msg)
         return 1
     print opts
     return 0
