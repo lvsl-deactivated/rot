@@ -19,6 +19,7 @@ DEBUG = True
 
 import os
 import sys
+import subprocess
 
 from optparse import OptionParser
 from collections import namedtuple
@@ -179,9 +180,25 @@ def read_argv():
 
 
 
+def run_program(opts):
+    subp_params = {
+        'shell': True,
+        'stdin': sys.stdin,
+        'stdout': sys.stdin if not opts.out_file else open(opts.out_file, 'wb'),
+        'stderr': sys.stderr if not opts.err_file else open(opts.err_file, 'wb'),
+    }
+    p = subprocess.Popen(' '.join(opts.args), **subp_params)
+    p.communicate()
+
+    return p.returncode
+
+
+
 def main():
     try:
         opts = read_argv()
+        exit_code = run_program(opts)
+        return exit_code
     except Exception as e:
         if DEBUG:
             msg = e
@@ -189,8 +206,6 @@ def main():
             msg = e.message
         sys.stderr.write("%s\n" % msg)
         return 1
-    print opts
-    return 0
 
 
 
