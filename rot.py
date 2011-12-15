@@ -19,6 +19,8 @@ DEBUG = True
 
 import os
 import sys
+import fcntl
+import errno
 import subprocess
 
 from optparse import OptionParser
@@ -180,15 +182,54 @@ def read_argv():
 
 
 
+def _non_block_fd(fo):
+    fd = fo.fileno()
+    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+    return fd
+
+
+
 def run_program(opts):
     subp_params = {
         'shell': True,
         'stdin': sys.stdin,
-        'stdout': sys.stdin if not opts.out_file else open(opts.out_file, 'wb'),
-        'stderr': sys.stderr if not opts.err_file else open(opts.err_file, 'wb'),
+        'stdout': subprocess.PIPE,
+        'stderr': subprocess.PIPE,
     }
     p = subprocess.Popen(' '.join(opts.args), **subp_params)
-    p.communicate()
+
+    out_fd_in = _non_block_fd(p.stdout)
+    if opts.out_file:
+        out_file = open(opts.out_file, 'wb')
+    else:
+        out_file = sys.stdout
+
+    err_fd_in = _non_block_fd(p.stderr)
+    if opts.err_file:
+        err_file = open(opts.err_file, 'wb')
+    else:
+        err_file = sys.stderr
+
+    while p.poll() is None:
+        try:
+            out_buff = os.read(out_fd_in, 1024)
+            out_file.write(out_buff)
+            out_file.flush()
+        except OSError as e:
+            if e.errno != errno.EAGAIN:
+                raise
+
+        try:
+            err_buff = os.read(err_fd_in, 1024)
+            err_file.write(err_buff)
+            err_file.flush()
+        except OSError as e:
+            if e.errno != errno.EAGAIN:
+                raise
+
+    out_file.close()
+    err_file.close()
 
     return p.returncode
 
