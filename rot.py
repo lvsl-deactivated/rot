@@ -1,15 +1,18 @@
 # coding: utf-8
 
 '''
-%prog [options] <program> args
+  --std[out|err]-file F:  Write [stdout|stderr] to F.
+                          Write performs by chunks with flush.
 
-======
-R.O.T - Rotate Outputs To ...
+  --std[out|err]-limit L: Limit the size of --std[out|err]-file to L.
+                          Available size types: B, K, M, G.
+
+  --std[out|err]-count N: Works iff --std[out|err]-limit is set.
+                          If size of F > L then rotate F no more than N times.
 
 Example:
-  %prog --stdout-file ~/out.txt --stdout-count 4 --stdout-limit 100M -- spam_program -a -b -c 10
-
-======
+  %prog --stdout-file ~/out.txt --stdout-count 4 --stdout-limit 100M \\
+  -- spam_program -a -b -c 10
 '''
 
 DEBUG = True
@@ -231,8 +234,11 @@ def run_program(opts):
     out_limit = 0
     err_limit = 0
     while p.poll() is None:
-        out_limit += _read_fd(out_fd_in, out_file, opts.out_limit, out_limit)
-        err_limit += _read_fd(err_fd_in, err_file, opts.err_limit, err_limit)
+        out_delta = _read_fd(out_fd_in, out_file, opts.out_limit, out_limit)
+        out_limit += out_delta
+
+        err_delta = _read_fd(err_fd_in, err_file, opts.err_limit, err_limit)
+        err_limit += err_delta
 
     out_file.close()
     err_file.close()
