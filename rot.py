@@ -182,20 +182,34 @@ def read_argv():
 
 
 
-def _non_block_fd(fo):
-    fd = fo.fileno()
-    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
-    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-    return fd
-
-
-
-def _read_fd(fd, fo, limit, curr_pos):
+class Rot(object):
 
     BUF_SIZE = 1024
 
-    try:
-        buff = os.read(fd, BUF_SIZE)
+    def __init__(self, opts):
+        self.opts = opts
+        self.subp_params = {
+            'shell': True,
+            'stdin': sys.stdin,
+            'stdout': subprocess.PIPE,
+            'stderr': subprocess.PIPE,
+        }
+        # Doh! must type every line twice :(
+        self.out_file = open(opts.out_file, 'wb') if opts.out_file else sys.stdout
+        self.err_file = open(opts.err_file, 'wb') if opts.err_file else sys.stderr
+
+        self.out_limit = 0
+        self.err_limit = 0
+
+    @staticmethod
+    def _non_block_fd(fo):
+        fd = fo.fileno()
+        flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        return fd
+
+    def _read_fd(self, fd, fo, limit, curr_pos):
+        buff = os.read(fd, self.BUF_SIZE)
         if limit:
             d = limit - curr_pos
             if d > 0:
@@ -203,54 +217,42 @@ def _read_fd(fd, fo, limit, curr_pos):
                 fo.write(buff[:d])
                 fo.flush()
                 return l
-            else:
-                os.read(fd, BUF_SIZE)
         else:
             fo.write(buff)
             fo.flush()
-    except OSError as e:
-        if e.errno != errno.EAGAIN:
-            raise
-    return curr_pos
+        return curr_pos
 
+    def __call__(self):
+        p = subprocess.Popen(' '.join(self.opts.args), **self.subp_params)
+        out_fd_in = self._non_block_fd(p.stdout)
+        err_fd_in = self._non_block_fd(p.stderr)
+        while p.poll() is None:
+            try:
+                out_delta = self._read_fd(out_fd_in, self.out_file, self.opts.out_limit, self.out_limit)
+                self.out_limit += out_delta
+            except OSError as e:
+                if e.errno != errno.EAGAIN:
+                    raise
 
+            try:
+                err_delta = self._read_fd(err_fd_in, self.err_file, self.opts.err_limit, self.err_limit)
+                self.err_limit += err_delta
+            except OSError as e:
+                if e.errno != errno.EAGAIN:
+                    raise
 
-def run_program(opts):
-    subp_params = {
-        'shell': True,
-        'stdin': sys.stdin,
-        'stdout': subprocess.PIPE,
-        'stderr': subprocess.PIPE,
-    }
-    p = subprocess.Popen(' '.join(opts.args), **subp_params)
+        self.out_file.close()
+        self.err_file.close()
 
-    # Doh! must type every line twice :(
-    out_file = open(opts.out_file, 'wb') if opts.out_file else sys.stdout
-    err_file = open(opts.err_file, 'wb') if opts.err_file else sys.stderr
-
-    out_fd_in = _non_block_fd(p.stdout)
-    err_fd_in = _non_block_fd(p.stderr)
-
-    out_limit = 0
-    err_limit = 0
-    while p.poll() is None:
-        out_delta = _read_fd(out_fd_in, out_file, opts.out_limit, out_limit)
-        out_limit += out_delta
-
-        err_delta = _read_fd(err_fd_in, err_file, opts.err_limit, err_limit)
-        err_limit += err_delta
-
-    out_file.close()
-    err_file.close()
-
-    return p.returncode
+        return p.returncode
 
 
 
 def main():
     try:
         opts = read_argv()
-        exit_code = run_program(opts)
+        run_program = Rot(opts)
+        exit_code = run_program()
         return exit_code
     except Exception as e:
         if DEBUG:
