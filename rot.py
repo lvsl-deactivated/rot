@@ -8,10 +8,8 @@
 R.O.T - Rotate Outputs To ...
 
 Example:
-  %prog --stdout-file ~/out.txt \\
-         --stdout-count 4        \\
-         --stdout-limit 100M     \\
-  spam_program -a -b -c 10
+  %prog --stdout-file ~/out.txt --stdout-count 4 --stdout-limit 100M -- spam_program -a -b -c 10
+
 ======
 '''
 
@@ -191,6 +189,9 @@ def _non_block_fd(fo):
 
 
 def run_program(opts):
+
+    BUF_SIZE = 1024
+
     subp_params = {
         'shell': True,
         'stdin': sys.stdin,
@@ -211,19 +212,41 @@ def run_program(opts):
     else:
         err_file = sys.stderr
 
+    out_limit = 0
+    err_limit = 0
     while p.poll() is None:
         try:
-            out_buff = os.read(out_fd_in, 1024)
-            out_file.write(out_buff)
-            out_file.flush()
+            out_buff = os.read(out_fd_in, BUF_SIZE)
+            if opts.out_limit:
+                d = opts.out_limit - out_limit
+                if d > 0:
+                    l = len(out_buff)
+                    out_file.write(out_buff[:d])
+                    out_file.flush()
+                    out_limit += l
+                else:
+                    while os.read(out_fd_in, BUF_SIZE): pass
+            else:
+                out_file.write(out_buff[:d])
+                out_file.flush()
         except OSError as e:
             if e.errno != errno.EAGAIN:
                 raise
 
         try:
-            err_buff = os.read(err_fd_in, 1024)
-            err_file.write(err_buff)
-            err_file.flush()
+            err_buff = os.read(err_fd_in, BUF_SIZE)
+            if opts.err_limit:
+                d = opts.err_limit - err_limit
+                if d > 0:
+                    l = len(err_buff)
+                    err_file.write(err_buff[:d])
+                    err_file.flush()
+                    err_limit += l
+                else:
+                    while os.read(err_fd_in, BUF_SIZE): pass
+            else:
+                err_file.write(err_buff[:d])
+                err_file.flush()
         except OSError as e:
             if e.errno != errno.EAGAIN:
                 raise
