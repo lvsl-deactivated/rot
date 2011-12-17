@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # coding: utf-8
 
 '''
@@ -259,8 +258,3 @@ def main():
             msg = e.message
         sys.stderr.write("%s\n" % msg)
         return 1
-
-
-
-if __name__ == "__main__":
-    sys.exit(main())
