@@ -38,6 +38,9 @@ Opts = namedtuple('Opts',
 
 
 class Validator(object):
+    '''\
+    Django-style command line parameters validation.
+    '''
 
     def __init__(self):
         self.validators = {
@@ -48,6 +51,10 @@ class Validator(object):
         }
 
     def __call__(self, v, t):
+        '''\
+        Validate value `v` with validator `t`
+        '''
+
         if t not in self.validators:
             raise RotError("Unknown validator: %s" % t)
         elif v is None:
@@ -108,6 +115,11 @@ class Validator(object):
             return limit_in_bytes
 
     def _validate_args(self, args):
+        '''\
+        Args is the program from which we rediret stdout/stderr
+        Here we try to find absolute path to this program
+        using unix's which like logic.
+        '''
         def which(program):
             ''' taken from http://stackoverflow.com/a/377028 '''
             def is_exe(fpath):
@@ -158,6 +170,10 @@ def validate_args(a):
 
 
 def read_argv():
+    '''\
+    Read command-line options with optparse and validate them
+    '''
+
     p = OptionParser(usage=__doc__)
     p.add_option("--stdout-file",  dest="out_file")
     p.add_option("--stdout-count", dest="out_count")
@@ -223,6 +239,10 @@ class Rot(object):
         return curr_pos
 
     def __call__(self):
+        '''\
+        Actually run a program with subprocess, and read
+        it's stdout/stderr via pipe.
+        '''
         p = subprocess.Popen(' '.join(self.opts.args), **self.subp_params)
         out_fd_in = self._non_block_fd(p.stdout)
         err_fd_in = self._non_block_fd(p.stderr)
@@ -249,6 +269,10 @@ class Rot(object):
 
 
 def main():
+    '''\
+    Run program.
+    Call this method from your scripts
+    '''
     try:
         opts = read_argv()
         run_program = Rot(opts)
