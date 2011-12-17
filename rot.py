@@ -221,17 +221,12 @@ def run_program(opts):
     }
     p = subprocess.Popen(' '.join(opts.args), **subp_params)
 
-    out_fd_in = _non_block_fd(p.stdout)
-    if opts.out_file:
-        out_file = open(opts.out_file, 'wb')
-    else:
-        out_file = sys.stdout
+    # Doh! must type every line twice :(
+    out_file = open(opts.out_file, 'wb') if opts.out_file else sys.stdout
+    err_file = open(opts.err_file, 'wb') if opts.err_file else sys.stderr
 
+    out_fd_in = _non_block_fd(p.stdout)
     err_fd_in = _non_block_fd(p.stderr)
-    if opts.err_file:
-        err_file = open(opts.err_file, 'wb')
-    else:
-        err_file = sys.stderr
 
     out_limit = 0
     err_limit = 0
