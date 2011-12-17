@@ -188,10 +188,32 @@ def _non_block_fd(fo):
 
 
 
-def run_program(opts):
+def _read_fd(fd, fo, limit, curr_pos):
 
     BUF_SIZE = 1024
 
+    try:
+        buff = os.read(fd, BUF_SIZE)
+        if limit:
+            d = limit - curr_pos
+            if d > 0:
+                l = len(buff)
+                fo.write(buff[:d])
+                fo.flush()
+                return l
+            else:
+                os.read(fd, BUF_SIZE)
+        else:
+            fo.write(buff)
+            fo.flush()
+    except OSError as e:
+        if e.errno != errno.EAGAIN:
+            raise
+    return curr_pos
+
+
+
+def run_program(opts):
     subp_params = {
         'shell': True,
         'stdin': sys.stdin,
@@ -215,41 +237,8 @@ def run_program(opts):
     out_limit = 0
     err_limit = 0
     while p.poll() is None:
-        try:
-            out_buff = os.read(out_fd_in, BUF_SIZE)
-            if opts.out_limit:
-                d = opts.out_limit - out_limit
-                if d > 0:
-                    l = len(out_buff)
-                    out_file.write(out_buff[:d])
-                    out_file.flush()
-                    out_limit += l
-                else:
-                    while os.read(out_fd_in, BUF_SIZE): pass
-            else:
-                out_file.write(out_buff[:d])
-                out_file.flush()
-        except OSError as e:
-            if e.errno != errno.EAGAIN:
-                raise
-
-        try:
-            err_buff = os.read(err_fd_in, BUF_SIZE)
-            if opts.err_limit:
-                d = opts.err_limit - err_limit
-                if d > 0:
-                    l = len(err_buff)
-                    err_file.write(err_buff[:d])
-                    err_file.flush()
-                    err_limit += l
-                else:
-                    while os.read(err_fd_in, BUF_SIZE): pass
-            else:
-                err_file.write(err_buff[:d])
-                err_file.flush()
-        except OSError as e:
-            if e.errno != errno.EAGAIN:
-                raise
+        out_limit += _read_fd(out_fd_in, out_file, opts.out_limit, out_limit)
+        err_limit += _read_fd(err_fd_in, err_file, opts.err_limit, err_limit)
 
     out_file.close()
     err_file.close()
