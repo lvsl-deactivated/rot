@@ -1,0 +1,17 @@
+R.O.T - Rotate Outputs To ...
+
+Tool for redirection of stdout/stderr
+
+
+  --std[out|err]-file F:  Write [stdout|stderr] to F.
+                          Write performs by chunks with flush.
+
+  --std[out|err]-limit L: Limit the size of --std[out|err]-file to L.
+                          Available size types: B, K, M, G.
+
+  --std[out|err]-count N: Works iff --std[out|err]-limit is set.
+                          If size of F > L then rotate F no more than N times.
+
+Example:
+  %prog --stdout-file ~/out.txt --stdout-count 4 --stdout-limit 100M \\
+  -- spam_program -a -b -c 10
