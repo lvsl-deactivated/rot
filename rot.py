@@ -23,6 +23,7 @@ import glob
 import errno
 import fcntl
 import signal
+import select
 import threading
 import subprocess
 
@@ -208,6 +209,8 @@ class StreamCollector(threading.Thread):
     def __init__(self, stream, fname, limit, count, default_stream):
         self.fname = fname
         self.fd_in = self._non_block_fd(stream)
+        self.poll = select.epoll()
+        self.poll.register(self.fd_in, select.EPOLLIN | select.EPOLLERR | select.EPOLLHUP)
         self.fo = open(fname, 'wb') if fname else default_stream
         self.limit = limit
         self.count = count
@@ -273,12 +276,18 @@ class StreamCollector(threading.Thread):
 
     def run(self):
         while True:
+            events = self.poll.poll(-1, 1)
+            _, ev = events[0]
+            if ev in (select.EPOLLERR, select.EPOLLHUP):
+                break
             try:
                 if not self._read_fd():
                     break
             except OSError as e:
                 if e.errno != errno.EAGAIN:
                     raise
+
+        self.poll.close()
 
         if self.fo != self.default_stream:
             self.fo.close()
