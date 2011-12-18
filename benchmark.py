@@ -47,9 +47,10 @@ def emit_stdout(opts):
         sys.stdout.write('o' * opts.length)
         sys.stdout.write('\n')
         sys.stdout.flush()
-        sys.stdout.write('e' * opts.length)
-        sys.stdout.write('\n')
-        sys.stdout.flush()
+
+        sys.stderr.write('e' * opts.length)
+        sys.stderr.write('\n')
+        sys.stderr.flush()
         time.sleep(opts.sleep_interval)
 
 
