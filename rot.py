@@ -21,6 +21,7 @@ import os
 import sys
 import fcntl
 import errno
+import threading
 import subprocess
 
 from optparse import OptionParser
@@ -198,24 +199,19 @@ def read_argv():
 
 
 
-class Rot(object):
+class StreamCollector(threading.Thread):
 
     BUF_SIZE = 1024
 
-    def __init__(self, opts):
-        self.opts = opts
-        self.subp_params = {
-            'shell': True,
-            'stdin': sys.stdin,
-            'stdout': subprocess.PIPE,
-            'stderr': subprocess.PIPE,
-        }
-        # Doh! must type every line twice :(
-        self.out_file = open(opts.out_file, 'wb') if opts.out_file else sys.stdout
-        self.err_file = open(opts.err_file, 'wb') if opts.err_file else sys.stderr
+    def __init__(self, stream, fname, limit, count, default_stream):
+        self.fd_in = self._non_block_fd(stream)
+        self.fo = (fname, 'wb') if fname else default_stream
+        self.limit = limit
+        self.count = count
+        self.default_stream = default_stream
+        self.curr_pos = 0
 
-        self.out_limit = 0
-        self.err_limit = 0
+        threading.Thread.__init__(self)
 
     @staticmethod
     def _non_block_fd(fo):
@@ -224,47 +220,56 @@ class Rot(object):
         fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
         return fd
 
-    def _read_fd(self, fd, fo, limit, curr_pos):
-        buff = os.read(fd, self.BUF_SIZE)
-        if limit:
-            d = limit - curr_pos
+    def _read_fd(self):
+        buff = os.read(self.fd_in, self.BUF_SIZE)
+        if not buff:
+            return
+        if self.limit:
+            d = self.limit - self.curr_pos
             if d > 0:
                 l = len(buff)
-                fo.write(buff[:d])
-                fo.flush()
-                return l
+                self.fo.write(buff[:d])
+                self.fo.flush()
+                self.curr_pos += l
         else:
-            fo.write(buff)
-            fo.flush()
-        return curr_pos
+            self.fo.write(buff)
+            self.fo.flush()
 
-    def __call__(self):
-        '''\
-        Actually run a program with subprocess, and read
-        it's stdout/stderr via pipe.
-        '''
-        p = subprocess.Popen(' '.join(self.opts.args), **self.subp_params)
-        out_fd_in = self._non_block_fd(p.stdout)
-        err_fd_in = self._non_block_fd(p.stderr)
-        while p.poll() is None:
+    def run(self):
+        while True:
             try:
-                out_delta = self._read_fd(out_fd_in, self.out_file, self.opts.out_limit, self.out_limit)
-                self.out_limit += out_delta
+                if not self._read_fd():
+                    break
             except OSError as e:
                 if e.errno != errno.EAGAIN:
                     raise
 
-            try:
-                err_delta = self._read_fd(err_fd_in, self.err_file, self.opts.err_limit, self.err_limit)
-                self.err_limit += err_delta
-            except OSError as e:
-                if e.errno != errno.EAGAIN:
-                    raise
+        self.fo.close()
 
-        self.out_file.close()
-        self.err_file.close()
 
-        return p.returncode
+
+def run_program(opts):
+    subp_params = {
+        'shell': True,
+        'stdin': sys.stdin,
+        'stdout': subprocess.PIPE,
+        'stderr': subprocess.PIPE,
+    }
+
+    p = subprocess.Popen(' '.join(opts.args), **subp_params)
+
+    out_thread = StreamCollector(p.stdout, opts.out_file, opts.out_limit, opts.out_count, sys.stdout)
+    err_thread = StreamCollector(p.stderr, opts.err_file, opts.err_limit, opts.err_count, sys.stderr)
+
+    out_thread.start()
+    err_thread.start()
+
+    p.wait()
+
+    out_thread.join()
+    err_thread.join()
+
+    return p.returncode
 
 
 
@@ -275,8 +280,7 @@ def main():
     '''
     try:
         opts = read_argv()
-        run_program = Rot(opts)
-        exit_code = run_program()
+        exit_code = run_program(opts)
         return exit_code
     except Exception as e:
         if DEBUG:
