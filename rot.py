@@ -22,6 +22,7 @@ import sys
 import glob
 import errno
 import fcntl
+import signal
 import threading
 import subprocess
 
@@ -202,6 +203,8 @@ def read_argv():
 
 class StreamCollector(threading.Thread):
 
+    BUF_SIZE = 1024
+
     def __init__(self, stream, fname, limit, count, default_stream):
         self.fname = fname
         self.fd_in = self._non_block_fd(stream)
@@ -236,7 +239,7 @@ class StreamCollector(threading.Thread):
         return result
 
     def _read_fd(self):
-        buff = os.read(self.fd_in, self.limit)
+        buff = os.read(self.fd_in, self.limit or self.BUF_SIZE)
         if not buff:
             return
         if self.limit:
@@ -292,8 +295,16 @@ def run_program(opts):
 
     p = subprocess.Popen(' '.join(opts.args), **subp_params)
 
+    def h(*args, **kw):
+        p.terminate()
+
+    signal.signal(signal.SIGINT, h)
+
     out_thread = StreamCollector(p.stdout, opts.out_file, opts.out_limit, opts.out_count, sys.stdout)
     err_thread = StreamCollector(p.stderr, opts.err_file, opts.err_limit, opts.err_count, sys.stderr)
+
+    out_thread.daemon = True
+    err_thread.daemon = True
 
     out_thread.start()
     err_thread.start()
