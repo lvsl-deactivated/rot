@@ -19,8 +19,9 @@ DEBUG = True
 
 import os
 import sys
-import fcntl
+import glob
 import errno
+import fcntl
 import threading
 import subprocess
 
@@ -204,8 +205,9 @@ class StreamCollector(threading.Thread):
     BUF_SIZE = 1024
 
     def __init__(self, stream, fname, limit, count, default_stream):
+        self.fname = fname
         self.fd_in = self._non_block_fd(stream)
-        self.fo = (fname, 'wb') if fname else default_stream
+        self.fo = open(fname, 'wb') if fname else default_stream
         self.limit = limit
         self.count = count
         self.default_stream = default_stream
@@ -220,6 +222,21 @@ class StreamCollector(threading.Thread):
         fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
         return fd
 
+    def _list_logs(self):
+        """
+        Return sorted list of integers - the old logs' identifiers.
+        """
+        result = []
+        for name in glob.glob("%s.*" % self.fname):
+            try:
+                counter = int(name.split('.')[-1])
+                if counter:
+                    result.append(counter)
+            except ValueError:
+                pass
+        result.sort()
+        return result
+
     def _read_fd(self):
         buff = os.read(self.fd_in, self.BUF_SIZE)
         if not buff:
@@ -230,7 +247,23 @@ class StreamCollector(threading.Thread):
                 l = len(buff)
                 self.fo.write(buff[:d])
                 self.fo.flush()
-                self.curr_pos += l
+                # if count is present and buffer don't fit
+                # in file limit then rotate logs
+                if self.count and l > d:
+                    log_files = self._list_logs()
+                    log_files.reverse()
+                    for i in log_files:
+                        if i >= self.count:
+                            os.remove('%s.%d' % (self.fname, i))
+                        else:
+                            os.rename('%s.%d' % (self.fname, i), '%s.%d' % (self.fname, i+1))
+                    self.fo.close()
+                    os.rename(self.fname, '%s.1' % self.fname)
+                    self.fo = open(self.fname, 'wb')
+                    self.fo.write(buff[d:])
+                    self.curr_pos = 0
+                else:
+                    self.curr_pos += l
         else:
             self.fo.write(buff)
             self.fo.flush()
