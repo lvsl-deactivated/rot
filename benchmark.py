@@ -44,7 +44,10 @@ def read_options():
 
 def emit_stdout(opts):
     for i in range(opts.amount):
-        sys.stdout.write('x' * opts.length)
+        sys.stdout.write('o' * opts.length)
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+        sys.stdout.write('e' * opts.length)
         sys.stdout.write('\n')
         sys.stdout.flush()
         time.sleep(opts.sleep_interval)

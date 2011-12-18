@@ -234,6 +234,7 @@ class StreamCollector(threading.Thread):
         else:
             self.fo.write(buff)
             self.fo.flush()
+        return buff
 
     def run(self):
         while True:
@@ -244,7 +245,8 @@ class StreamCollector(threading.Thread):
                 if e.errno != errno.EAGAIN:
                     raise
 
-        self.fo.close()
+        if self.fo != self.default_stream:
+            self.fo.close()
 
 
 
