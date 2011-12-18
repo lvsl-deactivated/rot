@@ -202,8 +202,6 @@ def read_argv():
 
 class StreamCollector(threading.Thread):
 
-    BUF_SIZE = 1024
-
     def __init__(self, stream, fname, limit, count, default_stream):
         self.fname = fname
         self.fd_in = self._non_block_fd(stream)
@@ -238,7 +236,7 @@ class StreamCollector(threading.Thread):
         return result
 
     def _read_fd(self):
-        buff = os.read(self.fd_in, self.BUF_SIZE)
+        buff = os.read(self.fd_in, self.limit)
         if not buff:
             return
         if self.limit:
