@@ -243,27 +243,28 @@ class StreamCollector(threading.Thread):
             return
         if self.limit:
             d = self.limit - self.curr_pos
-            if d > 0:
-                l = len(buff)
-                self.fo.write(buff[:d])
-                self.fo.flush()
-                # if count is present and buffer don't fit
-                # in file limit then rotate logs
-                if self.count and l > d:
-                    log_files = self._list_logs()
-                    log_files.reverse()
-                    for i in log_files:
-                        if i >= self.count:
-                            os.remove('%s.%d' % (self.fname, i))
-                        else:
-                            os.rename('%s.%d' % (self.fname, i), '%s.%d' % (self.fname, i+1))
-                    self.fo.close()
-                    os.rename(self.fname, '%s.1' % self.fname)
-                    self.fo = open(self.fname, 'wb')
-                    self.fo.write(buff[d:])
-                    self.curr_pos = 0
-                else:
-                    self.curr_pos += l
+            if d < 0:
+                return buff
+            l = len(buff)
+            self.fo.write(buff[:d])
+            self.fo.flush()
+            # if count is present and buffer don't fit
+            # in file limit then rotate logs
+            if self.count and (self.curr_pos + l) > self.limit:
+                log_files = self._list_logs()
+                log_files.reverse()
+                for i in log_files:
+                    if i >= self.count:
+                        os.remove('%s.%d' % (self.fname, i))
+                    else:
+                        os.rename('%s.%d' % (self.fname, i), '%s.%d' % (self.fname, i+1))
+                self.fo.close()
+                os.rename(self.fname, '%s.1' % self.fname)
+                self.fo = open(self.fname, 'wb')
+                self.fo.write(buff[d:])
+                self.curr_pos = l - d
+            else:
+                self.curr_pos += l
         else:
             self.fo.write(buff)
             self.fo.flush()
