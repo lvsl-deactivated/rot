@@ -254,7 +254,7 @@ class StreamCollector(threading.Thread):
             self.fo.flush()
             # if count is present and buffer don't fit
             # in file limit then rotate logs
-            if self.count and (self.curr_pos + l) > self.limit:
+            if self.count and self.fo != self.default_stream and (self.curr_pos + l) > self.limit:
                 log_files = self._list_logs()
                 log_files.reverse()
                 for i in log_files:
